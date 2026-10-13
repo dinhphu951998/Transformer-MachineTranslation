@@ -17,9 +17,9 @@ class BilingualDataset(Dataset):
         self.target_lang = target_lang
         self.seq_len = seq_len
 
-        self.sos_token = torch.Tensor([tokenizer_src.token_to_id('[SOS]')])
-        self.eos_token = torch.Tensor([tokenizer_src.token_to_id('[EOS]')])
-        self.pad_token = torch.Tensor([tokenizer_src.token_to_id('[PAD]')])
+        self.sos_token = torch.tensor([tokenizer_src.token_to_id('[SOS]')], dtype=torch.int64)
+        self.eos_token = torch.tensor([tokenizer_src.token_to_id('[EOS]')], dtype=torch.int64)
+        self.pad_token = torch.tensor([tokenizer_src.token_to_id('[PAD]')], dtype=torch.int64)
 
     def __len__(self):
         return len(self.ds)
@@ -43,9 +43,9 @@ class BilingualDataset(Dataset):
         encoder_input = torch.cat(
             [
                 self.sos_token,
-                torch.tensor(enc_input_tokens),
+                torch.tensor(enc_input_tokens, dtype=torch.int64),
                 self.eos_token,
-                torch.tensor([self.pad_token]* enc_num_padding_tokens)
+                torch.tensor([self.pad_token]* enc_num_padding_tokens, dtype=torch.int64)
             ]
         )
 
@@ -53,17 +53,17 @@ class BilingualDataset(Dataset):
         decoder_input = torch.cat(
                     [
                         self.sos_token,
-                        torch.tensor(dec_input_tokens),
-                        torch.tensor([self.pad_token]* dec_num_padding_tokens)
+                        torch.tensor(dec_input_tokens, dtype=torch.int64),
+                        torch.tensor([self.pad_token]* dec_num_padding_tokens, dtype=torch.int64)
                     ]
                 )
 
         # Add eos to the label - what we expect as output from decoder
         label = torch.cat(
             [
-                torch.tensor(dec_input_tokens),
+                torch.tensor(dec_input_tokens, dtype=torch.int64),
                 self.eos_token,
-                torch.tensor([self.pad_token]* dec_num_padding_tokens)
+                torch.tensor([self.pad_token]* dec_num_padding_tokens, dtype=torch.int64)
             ]
         )
 
