@@ -27,7 +27,7 @@ class PositionalEncoding(nn.Module):
         pe = torch.zeros(seq_len, d_model)
 
         # Create a vector of shape (seq_len, 1)
-        position = torch.arrange(0, seq_len, dtype=torch.float).unsqueeze(1)
+        position = torch.arange(0, seq_len, dtype=torch.float).unsqueeze(1)
         div_term = torch.arange(0, d_model, 2).float() * (-math.log(10000.0)/d_model)
 
         # Apply the sin to even positions
@@ -36,7 +36,7 @@ class PositionalEncoding(nn.Module):
 
         pe = pe.unsqueeze(0) # (1, seq_len, d_model)
 
-        self.register_buffer("pe", "pe")
+        self.register_buffer("pe", pe)
 
     def forward(self, x):
         pass
@@ -47,7 +47,7 @@ class LayerNormalization(nn.Module):
         super().__init__()
         self.eps = eps
         self.alpha = nn.Parameter(torch.ones(1)) # multiply
-        self.bias = nn.Paramerter(torch.zeros(1)) # added
+        self.bias = nn.Parameter(torch.zeros(1)) # added
 
     def forward(self, x):
         mean = x.mean(dim = -1, keepdim=True) # dim -1 là gì?
@@ -57,7 +57,7 @@ class LayerNormalization(nn.Module):
 class FeedForwardBlock(nn.Module):
 
     def __init__(self, d_model: int, d_ff: int, dropout: float):
-        super().__init()
+        super().__init__()
         self.linear_1 = nn.Linear(d_model, d_ff) # W1 and B1
         self.dropout = nn.Dropout(dropout)
         self.linear_2 = nn.Linear(d_ff, d_model) # W2 and B2
@@ -68,13 +68,13 @@ class FeedForwardBlock(nn.Module):
 
 class MultiHeadAttentionBlock(nn.Module):
     def __init__(self, d_model: int, h: int, dropout: float):
-        super().__init()
+        super().__init__()
         self.d_model = d_model
         self.h = h
         assert d_model % h == 0, "không chia hết"
 
         self.d_k = d_model // h
-        self.w_q = nn.Linea(d_model, d_model) # Wq
+        self.w_q = nn.Linear(d_model, d_model) # Wq
         self.w_k = nn.Linear(d_model, d_model)
         self.w_v = nn.Linear(d_model, d_model)
 
@@ -118,7 +118,7 @@ class MultiHeadAttentionBlock(nn.Module):
 class ResidualConnection(nn.Module):
 
     def __init__(self, dropout: float):
-        super().__init()
+        super().__init__()
         self.dropout = nn.Dropout(dropout)
         self.norm = LayerNormalization()
 
@@ -133,9 +133,130 @@ class EncoderBlock(nn.Module):
         self.feed_foward_block = feed_foward_block
         self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(2)])
 
-    def forward():
+    # mask for padding values
+    def forward(self, x, src_mask):
+        x = self.residual_connections[0](x, lambda x: self.self_attention_block(x, x, x, src_mask))
+        x = self.residual_connections[1](x, self.feed_foward_block)
+        return x
+
+class Encoder(nn.Module):
+
+    def __init__(self, layers: nn.ModuleList):
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization
+
+    def forward(self, x, mask):
+        for layer in self.layers:
+            x = layer(x, mask)
+
+        return self.norm(x) # Tại sao lại thêm norm ở đây?
 
 
+class DecoderBlock(nn.Module):
+    def __init__(self, self_attention_block: MultiHeadAttentionBlock, cross_attention_block: MultiHeadAttentionBlock, feed_forwarch_block: FeedForwardBlock, dropout: float):
+        super().__init__()
+        self.self_attention_block = self_attention_block
+        self.cross_attention_block = cross_attention_block
+        self.feed_forwarch_block = feed_forwarch_block
+        self.residual_connections = nn.ModuleList([ResidualConnection(dropout) for _ in range(3)])
+
+    def forward(self, x, encoder_output, src_mask, target_mask):
+        x = self.residual_connections[0](x, lambda x: lambda x: self.self_attention_block(x, x, x, target_mask))
+        x = self.residual_connections[1](x, lambda x: lambda x: self.self_attention_block(x, encoder_output, encoder_output, src_mask))
+        x = self.residual_connections[2](x, self.feed_foward_block)
+        return x
+
+class Decoder(nn.Module):
+
+    def __init__(self, layers: nn.ModuleList):
+        super().__init__()
+        self.layers = layers
+        self.norm = LayerNormalization
+
+    def forward(self, x, encoder_output, src_mask, target_mask):
+        for layer in self.layers:
+            x = layer(x, encoder_output, src_mask, target_mask)
+
+        return self.norm(x) # Tại sao lại thêm norm ở đây?
+
+
+class ProjectionLayer(nn.Module):
+
+    def __init__(self, d_model: int, vocab_size: int):
+        super().__init__()
+        self.d_model = d_model
+        self.vocab_size = vocab_size
+        self.proj = nn.Linear(d_model, vocab_size)
+
+    def forward(self, x):
+        # batch, seq_len, d_model -> batch, seq_len, vocab
+        return torch.log_softmax(self.proj(x), dim=-1)
+
+
+class Transformer(nn.Module):
+
+    def __init__(self, encoder: Encoder, decoder: Decoder, src_embeddings: InputEmbeddings, target_embeddings: InputEmbeddings, src_pos: PositionalEncoding, target_pos: PositionalEncoding, projection_layer: ProjectionLayer):
+        super().__init__()
+        self.encoder = encoder
+        self.decoder = decoder
+        self.src_embeddings = src_embeddings
+        self.target_embeddings = target_embeddings
+        self.src_pos = src_pos
+        self.target_pos = target_pos
+        self.projection_layer = projection_layer
+        
+
+    def encode(self, src, src_mask):
+        src = self.src_embeddings(src)
+        src = self.src_pos(src)
+        return self.encoder(src, src_mask)
+
+    def decode(self, encoder_output, src_mask, target, target_mask):
+        target = self.target_embeddings(target)
+        target = self.target_pos(target)
+        return self.decoder(target, encoder_output, src_mask, target_mask)
+
+    def project(self, x):
+        return self.projection_layer(x)
+
+
+def build_transformer(src_vocab_size: int, target_vocab_size: int, src_seq_len: int, target_seq_len: int, d_model:int = 512, N: int = 6, h: int = 8, dropout: float = 0.1, d_ff = 2048):
+    src_embeddings = InputEmbeddings(d_model, src_vocab_size)
+    target_embeddings = InputEmbeddings(d_model, target_vocab_size)
+
+    src_pos = PositionalEncoding(d_model, src_seq_len, dropout)
+    target_pos = PositionalEncoding(d_model, target_seq_len, dropout)
+
+    encoder_blocks = []
+    for _ in range(N):
+        encoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout)
+        ff_block = FeedForwardBlock(d_model, d_ff, dropout)
+        encoder_block = EncoderBlock(encoder_self_attention_block, ff_block, dropout)
+        encoder_blocks.append(encoder_block)
+
+    # create decoders
+    decoder_blocks = []
+    for _ in range(N):
+        decoder_self_attention_block = MultiHeadAttentionBlock(d_model, h, dropout)
+        cross_attention_block = MultiHeadAttentionBlock(d_model, h, dropout)
+        ff_block = FeedForwardBlock(d_model, d_ff, dropout)
+
+        decoder_block = DecoderBlock(decoder_self_attention_block, cross_attention_block, ff_block, dropout)
+        decoder_blocks.append(decoder_block)
+
+    encoder = Encoder(nn.ModuleList(encoder_blocks))
+    decoder = Decoder(nn.ModuleList(decoder_blocks))
+
+    projection_layer = ProjectionLayer(d_model, target_vocab_size)
+
+    tranformer = Transformer(encoder, decoder, src_embeddings, target_embeddings, src_pos, target_pos, projection_layer)
+
+    for p in tranformer.parameters():
+        if p.dim() > 1:
+            nn.init.xavier_uniform_(p)
+
+    return tranformer
 
 
 
