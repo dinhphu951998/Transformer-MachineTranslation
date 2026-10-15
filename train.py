@@ -138,7 +138,7 @@ def get_ds(config):
     print("Max length of target sentence", max_len_tgt)
 
     train_dataloader = DataLoader(train_ds, batch_size=config['batch_size'], shuffle=True)
-    val_dataloader = DataLoader(train_ds, batch_size=1, shuffle=True)
+    val_dataloader = DataLoader(val_ds, batch_size=1, shuffle=True)
 
     return train_dataloader, val_dataloader, tokenizer_src, tokenizer_target
 
@@ -208,9 +208,11 @@ def train_model(config):
             optimizer.step()
             optimizer.zero_grad()
 
-            run_validation(model, val_dataloader, tokenizer_src, tokenizer_target, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step, writer)
-
             global_step+=1
+
+    
+        run_validation(model, val_dataloader, tokenizer_src, tokenizer_target, config['seq_len'], device, lambda msg: batch_iterator.write(msg), global_step, writer)
+
 
         model_filename = get_weights_file_path(config, f"{epoch:02d}")
         torch.save({
