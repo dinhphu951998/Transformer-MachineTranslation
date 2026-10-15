@@ -39,7 +39,7 @@ def greedy_decode(model, src, src_mask, tokenizer_src, tokenizer_target, max_len
         out = model.decode(encoder_output, src_mask, decoder_input, decoder_mask)
 
         # Get the next token
-        prob = model.project(out[:-1]) # ???
+        prob = model.project(out[:, -1])
 
         # select token with max prob
         _, next_word = torch.max(prob, dim=1)
@@ -56,7 +56,7 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_target, max_le
     model.eval()
     count = 0
 
-    source_text = []
+    source_texts = []
     expected = []
     predicted = []
 
@@ -76,7 +76,7 @@ def run_validation(model, validation_ds, tokenizer_src, tokenizer_target, max_le
             target_text = batch["target_text"][0]
             model_out_text = tokenizer_target.decode(model_out.detach().cpu().numpy())
 
-            source_text.append(source_text)
+            source_texts.append(source_text)
             expected.append(target_text)
             predicted.append(model_out_text)
 
