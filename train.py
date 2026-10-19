@@ -153,6 +153,8 @@ def train_model(config):
     device = "cpu"
     if torch.cuda.is_available():
         device = "cuda"
+    elif torch.backends.mps.is_available():
+            device = "mps"
     elif torch.xpu.is_available():
         device = "xpu"
     print(f"Using device {device}")
@@ -173,7 +175,7 @@ def train_model(config):
         model_filename = get_weights_file_path(config, config['preload'])
         print(f"Preloading model {model_filename}")
         state = torch.load(model_filename)
-        initial_epoch = state['epoch']
+        initial_epoch = state['epoch']+1
         optimizer.load_state_dict(state['optimizer_state_dict'])
         global_step = state['global_step']
 
